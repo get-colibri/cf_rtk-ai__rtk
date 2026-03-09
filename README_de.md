@@ -381,7 +381,7 @@ brew uninstall rtk       # Wenn über Homebrew installiert
 - **[INSTALL.md](INSTALL.md)** - Detaillierter Installationsleitfaden
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** - Technische Architektur
 - **[SECURITY.md](SECURITY.md)** - Sicherheitsrichtlinie und PR-Review-Prozess
-- **[AUDIT_GUIDE.md](docs/AUDIT_GUIDE.md)** - Leitfaden für Token-Einsparungs-Analytics
+- **[AUDITGUIDE.md](docs/AUDIT_GUIDE.md)** - Leitfaden für Token-Einsparungs-Analytics
 
 ## Mitwirken
 
