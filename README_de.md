@@ -34,261 +34,247 @@
 
 ---
 
-rtk filters and compresses command outputs before they reach your LLM context. Single Rust binary, zero dependencies, <10ms overhead.
+tk filtert und komprimiert Befehlsausgaben, bevor sie Ihren LLM-Kontext erreichen. Einzelnes Rust-Binary, null Abhängigkeiten, <10ms Overhead.
 
-## Token Savings (30-min Claude Code Session)
+## Token-Einsparungen (30-minütige Claude Code-Sitzung)
 
-| Operation | Frequency | Standard | rtk | Savings |
-|-----------|-----------|----------|-----|---------|
-| `ls` / `tree` | 10x | 2,000 | 400 | -80% |
-| `cat` / `read` | 20x | 40,000 | 12,000 | -70% |
-| `grep` / `rg` | 8x | 16,000 | 3,200 | -80% |
-| `git status` | 10x | 3,000 | 600 | -80% |
-| `git diff` | 5x | 10,000 | 2,500 | -75% |
-| `git log` | 5x | 2,500 | 500 | -80% |
-| `git add/commit/push` | 8x | 1,600 | 120 | -92% |
-| `cargo test` / `npm test` | 5x | 25,000 | 2,500 | -90% |
-| `ruff check` | 3x | 3,000 | 600 | -80% |
-| `pytest` | 4x | 8,000 | 800 | -90% |
-| `go test` | 3x | 6,000 | 600 | -90% |
+| Operation | Häufigkeit | Standard | rtk | Ersparnis |
+|-----------|-----------|----------|-----|----------|
+| `ls` / `tree` | 10x | 2.000 | 400 | -80% |
+| `cat` / `read` | 20x | 40.000 | 12.000 | -70% |
+| `grep` / `rg` | 8x | 16.000 | 3.200 | -80% |
+| `git status` | 10x | 3.000 | 600 | -80% |
+| `git diff` | 5x | 10.000 | 2.500 | -75% |
+| `git log` | 5x | 2.500 | 500 | -80% |
+| `git add/commit/push` | 8x | 1.600 | 120 | -92% |
+| `cargo test` / `npm test` | 5x | 25.000 | 2.500 | -90% |
+| `ruff check` | 3x | 3.000 | 600 | -80% |
+| `pytest` | 4x | 8.000 | 800 | -90% |
+| `go test` | 3x | 6.000 | 600 | -90% |
 | `docker ps` | 3x | 900 | 180 | -80% |
-| **Total** | | **~118,000** | **~23,900** | **-80%** |
+| **Gesamt** | | **~118.000** | **~23.900** | **-80%** |
 
-> Estimates based on medium-sized TypeScript/Rust projects. Actual savings vary by project size.
+> Schätzungen basierend auf mittelgroßen TypeScript/Rust-Projekten. Tatsächliche Ersparnisse variieren je nach Projektgröße.
 
 ## Installation
 
-### Homebrew (recommended)
-
+### Homebrew (empfohlen)
 ```bash
 brew install rtk
 ```
 
-### Quick Install (Linux/macOS)
-
+### Schnellinstallation (Linux/macOS)
 ```bash
 curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh
 ```
 
-> Installs to `~/.local/bin`. Add to PATH if needed:
+> Installiert nach `~/.local/bin`. Bei Bedarf zum PATH hinzufügen:
 > ```bash
-> echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc  # or ~/.zshrc
+> echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc # oder ~/.zshrc
 > ```
 
 ### Cargo
-
 ```bash
 cargo install --git https://github.com/rtk-ai/rtk
 ```
 
-### Pre-built Binaries
-
-Download from [releases](https://github.com/rtk-ai/rtk/releases):
+### Vorkompilierte Binaries
+Herunterladen von [Releases](https://github.com/rtk-ai/rtk/releases):
 - macOS: `rtk-x86_64-apple-darwin.tar.gz` / `rtk-aarch64-apple-darwin.tar.gz`
 - Linux: `rtk-x86_64-unknown-linux-musl.tar.gz` / `rtk-aarch64-unknown-linux-gnu.tar.gz`
 - Windows: `rtk-x86_64-pc-windows-msvc.zip`
 
-### Verify Installation
-
+### Installation überprüfen
 ```bash
-rtk --version   # Should show "rtk 0.27.1"
-rtk gain        # Should show token savings stats
+rtk --version # Sollte "rtk 0.27.1" zeigen
+rtk gain # Zeigt Token-Einsparungsstatistiken
 ```
 
-> **Name collision warning**: Another project named "rtk" (Rust Type Kit) exists on crates.io. If `rtk gain` fails, you have the wrong package. Use `cargo install --git` above instead.
+> **Warnung vor Namenskonflikt**: Es existiert ein anderes Projekt namens "rtk" (Rust Type Kit) auf crates.io. Wenn `rtk gain` fehlschlägt, haben Sie das falsche Paket. Verwenden Sie stattdessen `cargo install --git`.
 
-## Quick Start
-
+## Schnellstart
 ```bash
-# 1. Install hook for Claude Code (recommended)
+# 1. Hook für Claude Code installieren (empfohlen)
 rtk init --global
-# Follow instructions to register in ~/.claude/settings.json
-
-# 2. Restart Claude Code, then test
-git status  # Automatically rewritten to rtk git status
+# Anweisungen folgen, um in ~/.claude/settings.json zu registrieren
+# 2. Claude Code neu starten, dann testen
+git status # Automatisch umgeschrieben zu rtk git status
 ```
 
-The hook transparently rewrites commands (e.g., `git status` -> `rtk git status`) before execution. Claude never sees the rewrite, it just gets compressed output.
+Der Hook überschreibt Befehle transparent (z.B. `git status` -> `rtk git status`) vor der Ausführung. Claude sieht die Umschreibung nicht, es erhält nur die komprimierte Ausgabe.
 
-## How It Works
-
+## Funktionsweise
 ```
-  Without rtk:                                    With rtk:
-
-  Claude  --git status-->  shell  -->  git         Claude  --git status-->  RTK  -->  git
-    ^                                   |            ^                      |          |
-    |        ~2,000 tokens (raw)        |            |   ~200 tokens        | filter   |
-    +-----------------------------------+            +------- (filtered) ---+----------+
+Ohne rtk:                  Mit rtk:
+Claude --git status--> shell --> git    Claude --git status--> RTK --> git
+^                                   |    ^                              |
+| ~2.000 Token (roh)                |    | ~200 Token                   | filter
++-----------------------------------+    +-------(gefiltert)------------+----------+
 ```
 
-Four strategies applied per command type:
+Vier Strategien pro Befehlstyp:
+1. **Smart Filtering** - Entfernt Rauschen (Kommentare, Whitespace, Boilerplate)
+2. **Grouping** - Aggregiert ähnliche Elemente (Dateien nach Verzeichnis, Fehler nach Typ)
+3. **Truncation** - Behält relevanten Kontext, kürzt Redundanz
+4. **Deduplication** - Fasst wiederholte Log-Zeilen mit Zählern zusammen
 
-1. **Smart Filtering** - Removes noise (comments, whitespace, boilerplate)
-2. **Grouping** - Aggregates similar items (files by directory, errors by type)
-3. **Truncation** - Keeps relevant context, cuts redundancy
-4. **Deduplication** - Collapses repeated log lines with counts
+## Befehle
 
-## Commands
-
-### Files
+### Dateien
 ```bash
-rtk ls .                        # Token-optimized directory tree
-rtk read file.rs                # Smart file reading
-rtk read file.rs -l aggressive  # Signatures only (strips bodies)
-rtk smart file.rs               # 2-line heuristic code summary
-rtk find "*.rs" .               # Compact find results
-rtk grep "pattern" .            # Grouped search results
-rtk diff file1 file2            # Condensed diff
+rtk ls . # Token-optimierter Verzeichnisbaum
+rtk read file.rs # Intelligente Dateilesung
+rtk read file.rs -l aggressive # Nur Signaturen (entfernt Körper)
+rtk smart file.rs # 2-Zeilen-Heuristik-Code-Zusammenfassung
+rtk find "*.rs" . # Kompakte Suchergebnisse
+rtk grep "pattern" . # Gruppierte Suchergebnisse
+rtk diff file1 file2 # Komprimierte Diff
 ```
 
 ### Git
 ```bash
-rtk git status                  # Compact status
-rtk git log -n 10               # One-line commits
-rtk git diff                    # Condensed diff
-rtk git add                     # -> "ok"
-rtk git commit -m "msg"         # -> "ok abc1234"
-rtk git push                    # -> "ok main"
-rtk git pull                    # -> "ok 3 files +10 -2"
+rtk git status # Kompakter Status
+rtk git log -n 10 # Einzeilige Commits
+rtk git diff # Komprimierte Diff
+rtk git add # -> "ok"
+rtk git commit -m "msg" # -> "ok abc1234"
+rtk git push # -> "ok main"
+rtk git pull # -> "ok 3 Dateien +10 -2"
 ```
 
 ### GitHub CLI
 ```bash
-rtk gh pr list                  # Compact PR listing
-rtk gh pr view 42               # PR details + checks
-rtk gh issue list               # Compact issue listing
-rtk gh run list                 # Workflow run status
+rtk gh pr list # Kompakte PR-Liste
+rtk gh pr view 42 # PR-Details + Checks
+rtk gh issue list # Kompakte Issue-Liste
+rtk gh run list # Workflow-Run-Status
 ```
 
-### Test Runners
+### Test-Runner
 ```bash
-rtk test cargo test             # Show failures only (-90%)
-rtk err npm run build           # Errors/warnings only
-rtk vitest run                  # Vitest compact (failures only)
-rtk playwright test             # E2E results (failures only)
-rtk pytest                      # Python tests (-90%)
-rtk go test                     # Go tests (NDJSON, -90%)
-rtk cargo test                  # Cargo tests (-90%)
+rtk test cargo test # Zeigt nur Fehler (-90%)
+rtk err npm run build # Nur Fehler/Warnungen
+rtk vitest run # Vitest kompakt (nur Fehler)
+rtk playwright test # E2E-Ergebnisse (nur Fehler)
+rtk pytest # Python-Tests (-90%)
+rtk go test # Go-Tests (NDJSON, -90%)
+rtk cargo test # Cargo-Tests (-90%)
 ```
 
 ### Build & Lint
 ```bash
-rtk lint                        # ESLint grouped by rule/file
-rtk lint biome                  # Supports other linters
-rtk tsc                         # TypeScript errors grouped by file
-rtk next build                  # Next.js build compact
-rtk prettier --check .          # Files needing formatting
-rtk cargo build                 # Cargo build (-80%)
-rtk cargo clippy                # Cargo clippy (-80%)
-rtk ruff check                  # Python linting (JSON, -80%)
-rtk golangci-lint run           # Go linting (JSON, -85%)
+rtk lint # ESLint gruppiert nach Regel/Datei
+rtk lint biome # Unterstützt andere Linter
+rtk tsc # TypeScript-Fehler gruppiert nach Datei
+rtk next build # Next.js-Build kompakt
+rtk prettier --check . # Dateien, die Formatierung brauchen
+rtk cargo build # Cargo-Build (-80%)
+rtk cargo clippy # Cargo clippy (-80%)
+rtk ruff check # Python-Linting (JSON, -80%)
+rtk golangci-lint run # Go-Linting (JSON, -85%)
 ```
 
-### Package Managers
+### Paketmanager
 ```bash
-rtk pnpm list                   # Compact dependency tree
-rtk pip list                    # Python packages (auto-detect uv)
-rtk pip outdated                # Outdated packages
-rtk prisma generate             # Schema generation (no ASCII art)
+rtk pnpm list # Kompakte Abhängigkeitsstruktur
+rtk pip list # Python-Pakete (erkennt automatisch uv)
+rtk pip outdated # Veraltete Pakete
+rtk prisma generate # Schema-Generierung (keine ASCII-Kunst)
 ```
 
-### Containers
+### Container
 ```bash
-rtk docker ps                   # Compact container list
-rtk docker images               # Compact image list
-rtk docker logs <container>     # Deduplicated logs
-rtk docker compose ps           # Compose services
-rtk kubectl pods                # Compact pod list
-rtk kubectl logs <pod>          # Deduplicated logs
-rtk kubectl services            # Compact service list
+rtk docker ps # Kompakte Container-Liste
+rtk docker images # Kompakte Image-Liste
+rtk docker logs # Deduplizierte Logs
+rtk docker compose ps # Compose-Services
+rtk kubectl pods # Kompakte Pod-Liste
+rtk kubectl logs # Deduplizierte Logs
+rtk kubectl services # Kompakte Service-Liste
 ```
 
-### Data & Analytics
+### Daten & Analytics
 ```bash
-rtk json config.json            # Structure without values
-rtk deps                        # Dependencies summary
-rtk env -f AWS                  # Filtered env vars
-rtk log app.log                 # Deduplicated logs
-rtk curl <url>                  # Auto-detect JSON + schema
-rtk wget <url>                  # Download, strip progress bars
-rtk summary <long command>      # Heuristic summary
-rtk proxy <command>             # Raw passthrough + tracking
+rtk json config.json # Struktur ohne Werte
+rtk deps # Abhängigkeitsübersicht
+rtk env -f AWS # Gefilterte Umgebungsvariablen
+rtk log app.log # Deduplizierte Logs
+rtk curl # Automatische JSON + Schema-Erkennung
+rtk wget # Download, entfernt Fortschrittsbalken
+rtk summary # Heuristische Zusammenfassung
+rtk proxy # Raw-Passthrough + Tracking
 ```
 
-### Token Savings Analytics
+### Token-Einsparungs-Analytics
 ```bash
-rtk gain                        # Summary stats
-rtk gain --graph                # ASCII graph (last 30 days)
-rtk gain --history              # Recent command history
-rtk gain --daily                # Day-by-day breakdown
-rtk gain --all --format json    # JSON export for dashboards
-
-rtk discover                    # Find missed savings opportunities
-rtk discover --all --since 7    # All projects, last 7 days
+rtk gain # Zusammenfassungsstatistiken
+rtk gain --graph # ASCII-Graph (letzte 30 Tage)
+rtk gain --history # Letzte Befehlshistorie
+rtk gain --daily # Tag-für-Tag-Aufschlüsselung
+rtk gain --all --format json # JSON-Export für Dashboards
+rtk discover # Verpasste Einsparungsmöglichkeiten finden
+rtk discover --all --since 7 # Alle Projekte, letzte 7 Tage
 ```
 
-## Global Flags
-
+## Globale Flags
 ```bash
--u, --ultra-compact    # ASCII icons, inline format (extra token savings)
--v, --verbose          # Increase verbosity (-v, -vv, -vvv)
+-u, --ultra-compact # ASCII-Icons, Inline-Format (zusätzliche Token-Einsparung)
+-v, --verbose # Verbosität erhöhen (-v, -vv, -vvv)
 ```
 
-## Examples
+## Beispiele
 
-**Directory listing:**
+**Verzeichnisauflistung:**
 ```
-# ls -la (45 lines, ~800 tokens)        # rtk ls (12 lines, ~150 tokens)
-drwxr-xr-x  15 user staff 480 ...       my-project/
--rw-r--r--   1 user staff 1234 ...       +-- src/ (8 files)
-...                                      |   +-- main.rs
-                                         +-- Cargo.toml
+# ls -la (45 Zeilen, ~800 Token)     # rtk ls (12 Zeilen, ~150 Token)
+drwxr-xr-x 15 user staff 480 ... my-project/
+-rw-r--r--  1 user staff 1234 ...   +-- src/ (8 Dateien)
+...                                 |   +-- main.rs
+                                    +-- Cargo.toml
 ```
 
-**Git operations:**
+**Git-Operationen:**
 ```
-# git push (15 lines, ~200 tokens)       # rtk git push (1 line, ~10 tokens)
-Enumerating objects: 5, done.             ok main
+# git push (15 Zeilen, ~200 Token)   # rtk git push (1 Zeile, ~10 Token)
+Enumerating objects: 5, done.        ok main
 Counting objects: 100% (5/5), done.
 Delta compression using up to 8 threads
 ...
 ```
 
-**Test output:**
+**Test-Ausgabe:**
 ```
-# cargo test (200+ lines on failure)     # rtk test cargo test (~20 lines)
-running 15 tests                          FAILED: 2/15 tests
-test utils::test_parse ... ok               test_edge_case: assertion failed
-test utils::test_format ... ok              test_overflow: panic at utils.rs:18
+# cargo test (200+ Zeilen bei Fehler)  # rtk test cargo test (~20 Zeilen)
+running 15 tests                       FAILED: 2/15 tests
+test utils::test_parse ... ok          test_edge_case: assertion failed
+test utils::test_format ... ok         test_overflow: panic at utils.rs:18
 ...
 ```
 
-## Auto-Rewrite Hook
+## Auto-Rewrite-Hook
 
-The most effective way to use rtk. The hook transparently intercepts Bash commands and rewrites them to rtk equivalents before execution.
+Die effektivste Methode, rtk zu verwenden. Der Hook fängt Bash-Befehle transparent ab und schreibt sie vor der Ausführung zu rtk-Äquivalenten um.
 
-**Result**: 100% rtk adoption across all conversations and subagents, zero token overhead.
+**Ergebnis**: 100% rtk-Adoption über alle Konversationen und Subagenten, null Token-Overhead.
 
-### Setup
-
+### Einrichtung
 ```bash
-rtk init -g                 # Install hook + RTK.md (recommended)
-rtk init -g --auto-patch    # Non-interactive (CI/CD)
-rtk init -g --hook-only     # Hook only, no RTK.md
-rtk init --show             # Verify installation
+rtk init -g              # Hook installieren + RTK.md (empfohlen)
+rtk init -g --auto-patch # Nicht-interaktiv (CI/CD)
+rtk init -g --hook-only  # Nur Hook, kein RTK.md
+rtk init --show          # Installation überprüfen
 ```
 
-After install, **restart Claude Code**.
+Nach Installation **Claude Code neu starten**.
 
-### Commands Rewritten
-
-| Raw Command | Rewritten To |
-|-------------|-------------|
+### Umschriebene Befehle
+| Roh-Befehl | Umschrieben zu |
+|-------------|----------------|
 | `git status/diff/log/add/commit/push/pull` | `rtk git ...` |
 | `gh pr/issue/run` | `rtk gh ...` |
 | `cargo test/build/clippy` | `rtk cargo ...` |
-| `cat/head/tail <file>` | `rtk read <file>` |
-| `rg/grep <pattern>` | `rtk grep <pattern>` |
+| `cat/head/tail ` | `rtk read ` |
+| `rg/grep ` | `rtk grep ` |
 | `ls` | `rtk ls` |
 | `vitest/jest` | `rtk vitest run` |
 | `tsc` | `rtk tsc` |
@@ -306,65 +292,57 @@ After install, **restart Claude Code**.
 | `curl` | `rtk curl` |
 | `pnpm list/outdated` | `rtk pnpm ...` |
 
-Commands already using `rtk`, heredocs (`<<`), and unrecognized commands pass through unchanged.
+Befehle, die bereits `rtk` verwenden, Heredocs (`<<`) und nicht erkannte Befehle werden unverändert durchgereicht.
 
-## Configuration
+## Konfiguration
 
-### Config File
-
+### Konfigurationsdatei
 `~/.config/rtk/config.toml` (macOS: `~/Library/Application Support/rtk/config.toml`):
 
 ```toml
 [tracking]
-database_path = "/path/to/custom.db"  # default: ~/.local/share/rtk/history.db
+database_path = "/path/to/custom.db" # Standard: ~/.local/share/rtk/history.db
 
 [hooks]
-exclude_commands = ["curl", "playwright"]  # skip rewrite for these
+exclude_commands = ["curl", "playwright"] # Umschreibung für diese überspringen
 
 [tee]
-enabled = true          # save raw output on failure (default: true)
-mode = "failures"       # "failures", "always", or "never"
-max_files = 20          # rotation limit
+enabled = true  # Roh-Ausgabe bei Fehler speichern (Standard: true)
+mode = "failures"  # "failures", "always" oder "never"
+max_files = 20     # Rotationsgrenze
 ```
 
-### Tee: Full Output Recovery
-
-When a command fails, RTK saves the full unfiltered output so the LLM can read it without re-executing:
+### Tee: Vollständige Ausgabewiederherstellung
+Wenn ein Befehl fehlschlägt, speichert RTK die vollständige ungefilterte Ausgabe, damit die LLM sie ohne Neu-Ausführung lesen kann:
 
 ```
 FAILED: 2/15 tests
 [full output: ~/.local/share/rtk/tee/1707753600_cargo_test.log]
 ```
 
-### Uninstall
-
+### Deinstallation
 ```bash
-rtk init -g --uninstall     # Remove hook, RTK.md, settings.json entry
-cargo uninstall rtk          # Remove binary
-brew uninstall rtk           # If installed via Homebrew
+rtk init -g --uninstall  # Hook, RTK.md, settings.json-Eintrag entfernen
+cargo uninstall rtk      # Binary entfernen
+brew uninstall rtk       # Wenn über Homebrew installiert
 ```
 
-## Documentation
+## Dokumentation
+- **[TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)** - Häufige Probleme beheben
+- **[INSTALL.md](INSTALL.md)** - Detaillierter Installationsleitfaden
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - Technische Architektur
+- **[SECURITY.md](SECURITY.md)** - Sicherheitsrichtlinie und PR-Review-Prozess
+- **[AUDIT_GUIDE.md](docs/AUDIT_GUIDE.md)** - Leitfaden für Token-Einsparungs-Analytics
 
-- **[TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)** - Fix common issues
-- **[INSTALL.md](INSTALL.md)** - Detailed installation guide
-- **[ARCHITECTURE.md](ARCHITECTURE.md)** - Technical architecture
-- **[SECURITY.md](SECURITY.md)** - Security policy and PR review process
-- **[AUDIT_GUIDE.md](docs/AUDIT_GUIDE.md)** - Token savings analytics guide
+## Mitwirken
+Beiträge willkommen! Siehe das **[Contributing Guide](CONTRIBUTING.md)** für Benennung von Branches, PR-Prozess, Testanforderungen und Coding-Practices.
 
+Treten Sie der Community auf [Discord](https://discord.gg/pvHdzAec) bei.
 
-## Contributing
+## Lizenz
+MIT License - siehe [LICENSE](LICENSE) für Details.
 
-Contributions welcome! See the **[Contributing Guide](CONTRIBUTING.md)** for branch naming, PR process, testing requirements, and coding practices.
-
-Join the community on [Discord](https://discord.gg/pvHdzAec).
-
-## License
-
-MIT License - see [LICENSE](LICENSE) for details.
-
-## Contact
-
+## Kontakt
 - Website: https://www.rtk-ai.app
-- Email: contact@rtk-ai.app
+- E-Mail: contact@rtk-ai.app
 - Issues: https://github.com/rtk-ai/rtk/issues
