@@ -83,7 +83,7 @@ echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc  # or ~/.zshrc
 cargo install --git https://github.com/rtk-ai/rtk
 ```
 
-### Vorkompilierte Binaries
+### Pre-built Binaries
 
 Herunterladen von [Releases](https://github.com/rtk-ai/rtk/releases):
 
