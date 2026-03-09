@@ -71,7 +71,9 @@ curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/instal
 ```
 
 > Installiert nach `~/.local/bin`. Bei Bedarf zum PATH hinzufügen:
-### <br>&#8203;Cargo
+### echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc  # or ~/.zshrc
+
+### <br><br>Cargo
 
 
 ```bash
